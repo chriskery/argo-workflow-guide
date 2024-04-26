@@ -358,4 +358,7 @@ spec:
       securityContext:
         runAsUser: 0 # to allow read of ssh key
 ```
-# 
+提交到Argo Workflow中，我们能看到最下面多了一个build-docker的task；
+![截屏2024-04-27 00.39.30.png](https://cdn.nlark.com/yuque/0/2024/png/12923067/1714149576229-6882807b-5d54-4499-8ca7-10416f3bd991.png#averageHue=%235abb98&clientId=uc0b33e88-6645-4&from=drop&id=uaa78ef13&originHeight=1282&originWidth=2740&originalType=binary&ratio=2&rotation=0&showTitle=false&size=253399&status=done&style=none&taskId=u61661978-8df8-42b2-9629-81665b758a6&title=)
+查看构建日志：
+![截屏2024-04-27 00.40.31.png](https://cdn.nlark.com/yuque/0/2024/png/12923067/1714149635254-dd3499f0-d264-4a55-bfd7-732a86f5d419.png#averageHue=%23514f49&clientId=uc0b33e88-6645-4&from=drop&id=ueef045b3&originHeight=1338&originWidth=2880&originalType=binary&ratio=2&rotation=0&showTitle=false&size=545517&status=done&style=none&taskId=uebe5b696-e914-4db4-8aa4-e4bca7c754f&title=)	至此，我们完成了一个简单的gitops操作，从远端同步git代码->检查git文件->构建并推送镜像到镜像仓库中。我们现在是手工提交的workflow，但其实可以使用argo event提供的webhook机制在代码合并式自动进行提交，我们也可以继续增加新的步骤，比如单元测试、自动部署等，实现CICD的全流程自动化。
