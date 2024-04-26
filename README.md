@@ -38,33 +38,27 @@ Argo 组件：
 - Workflow Controller：负责运行 Workflows
 - Argo Server：提供 UI 和 API
 
-  ## 安装 Argo CLI
-
-  访问如下链接查看 Argo Cli 安装方法详情：[https://github.com/argoproj/argo-workflows/releases/](https://github.com/argoproj/argo-workflows/releases/)
+## 安装 Argo CLI
+访问如下链接查看 Argo Cli 安装方法详情：[https://github.com/argoproj/argo-workflows/releases/](https://github.com/argoproj/argo-workflows/releases/)
   For Mac：
 
-  ```go
-  # Download the binary
-  curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.5.6/argo-darwin-amd64.gz
-  ```
+```shell
+# Download the binary
+curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.5.6/argo-darwin-amd64.gz
 
 # Unzip
-
 gunzip argo-darwin-amd64.gz
 
 # Make binary executable
-
 chmod +x argo-darwin-amd64
 
 # Move binary to path
-
 mv ./argo-darwin-amd64 /usr/local/bin/argo
 
 # Test installation
-
 argo version
+```
 
-````
 ## 设置访问方式
 默认情况下argo-server采用客户端认证，这要求客户端使用**Kubernetes bearer token 进行身份认证。**对于学习、体验等场景，我们可以通过下面的命令直接设置绕过登录：
 ```shell
