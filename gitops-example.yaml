@@ -1,0 +1,91 @@
+#1. 使用git-sync clone一个git仓库到volume中
+#2. 使用Kaniko/buildkit构建docker镜像
+#3. 推送docker镜像到镜像仓库
+
+#git-secret:
+#kubectl create secret generic git-creds \
+#     --from-file=ssh=$HOME/.ssh/id_rsa \
+#     --from-file=known_hosts=$HOME/.ssh/known_hosts 
+
+#kubectl label node cn-hangzhou.172.20.223.208 argo-worflow="true"
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ci-test
+spec:
+  entrypoint: pipeline
+  #mount secrets for the workflow
+  volumes:
+    - name: git-secret
+      secret:
+        defaultMode: 256
+        secretName: git-creds # your-ssh-key
+    - name: repo-root
+      hostPath:
+        path: /tmp/ci-test
+        type: DirectoryOrCreate
+  nodeSelector:
+      argo-worflow: "true"
+  hostNetwork: true
+  #start the sequence
+  templates:
+    - name: pipeline
+      steps:
+        - - name: check-repo
+            template: check-repo
+            onExit: build-docker
+    - name: check-repo
+      container:
+        image: alpine:latest
+        command: [sh, -c]
+        args:
+          [
+            "echo getting message from volume; ls /workdir/root/argo-workflow-guide.git > ls.txt; cat ls.txt",
+          ]
+        volumeMounts:
+          - name: repo-root
+            mountPath: /workdir ##
+          - name: git-secret
+            mountPath: /etc/git-secret ##
+    - name: build-docker
+      container:
+        #argo is gonna ask for a command - the debug version allows us to exec this way i think
+        image: gcr.io/kaniko-project/executor:v1.9.0-debug
+        imagePullPolicy: Always
+        command: ["/kaniko/executor"]
+        # (if we set cache true we should make an ECR container update)
+        # i gave the full path to the docker file but maybe relative is fine
+        args:
+          [
+            "--dockerfile=/workdir/root/Dockerfile",
+            "--context=/workdir/root/argo-workflow-guide.git",
+            "--destination=docker.io/chriskery/argo-worflow-guide:v1",
+            "--cache=false",
+          ]
+        volumeMounts:
+          - name: repo-root
+            mountPath: /workdir ##
+        resources:
+          limits:
+            cpu: 1
+            memory: 5Gi
+      #this is the git fetch magic as an init container in the first step
+      initContainers:
+        - image: docker.io/chriskery/git-sync:v3.1.6
+          args:
+            - "--repo=git@github.com:chriskery/argo-workflow-guide.git"
+            - "--root=/workdir/root"
+            - "--max-sync-failures=3"
+            - "--timeout=200"
+            - "--branch=main"
+            - "--ssh"
+            - "--one-time"
+          name: git-data
+          volumeMounts:
+            - name: repo-root
+              mountPath: /workdir ##
+            - name: git-secret
+              mountPath: /etc/git-secret
+
+      securityContext:
+        runAsUser: 0 # to allow read of ssh key
