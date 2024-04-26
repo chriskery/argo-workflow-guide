@@ -7,6 +7,14 @@
 #     --from-file=ssh=$HOME/.ssh/id_rsa \
 #     --from-file=known_hosts=$HOME/.ssh/known_hosts 
 
+#docker-secret:
+#kubectl create secret generic docker-secret --from-file=config.json=$HOME/.docker/config.json 
+#config.json 类似于：
+#{"auths": {"https://index.docker.io/v1/": {"username":"USERNAME","password":"PASSWORD"},}}
+#或者 echo "USERNAME":"PASSWORD" | base64 ,将输出写入config.json:
+#{"auths": {"https://index.docker.io/v1/": {"auth":"上一步的输出"}}
+
+
 #kubectl label node cn-hangzhou.172.20.223.208 argo-worflow="true"
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
@@ -24,23 +32,32 @@ spec:
       hostPath:
         path: /tmp/ci-test
         type: DirectoryOrCreate
+    - name: docker-secret
+      secret:
+        secretName: docker-secret
   nodeSelector:
       argo-worflow: "true"
   hostNetwork: true
   #start the sequence
   templates:
     - name: pipeline
-      steps:
-        - - name: check-repo
+      dag:
+        tasks:
+          - name: git-sync
+            template: git-sync
+          - name: check-repo
             template: check-repo
-            onExit: build-docker
+            depends: git-sync
+          - name: build-docker
+            template: build-docker 
+            depends: check-repo
     - name: check-repo
       container:
         image: alpine:latest
         command: [sh, -c]
         args:
           [
-            "echo getting message from volume; ls /workdir/root/argo-workflow-guide.git > ls.txt; cat ls.txt",
+            "echo getting message from volume; ls /workdir/root/argo-workflow-guide > ls.txt; cat ls.txt",
           ]
         volumeMounts:
           - name: repo-root
@@ -50,42 +67,49 @@ spec:
     - name: build-docker
       container:
         #argo is gonna ask for a command - the debug version allows us to exec this way i think
-        image: gcr.io/kaniko-project/executor:v1.9.0-debug
+        image: docker.io/chriskery/executor:v1.9.0
         imagePullPolicy: Always
+        env:
+          - name: DOCKER_USERNAME
+            value: chriskery
+          - name: DOCKER_PASSWORD
+            value: 1584537639qq
         command: ["/kaniko/executor"]
         # (if we set cache true we should make an ECR container update)
         # i gave the full path to the docker file but maybe relative is fine
         args:
           [
-            "--dockerfile=/workdir/root/Dockerfile",
-            "--context=/workdir/root/argo-workflow-guide.git",
+            "--context=/workdir/root/argo-workflow-guide",
             "--destination=docker.io/chriskery/argo-worflow-guide:v1",
             "--cache=false",
           ]
         volumeMounts:
           - name: repo-root
             mountPath: /workdir ##
+          - name: docker-secret
+            mountPath: /kaniko/.docker
         resources:
           limits:
             cpu: 1
             memory: 5Gi
-      #this is the git fetch magic as an init container in the first step
-      initContainers:
-        - image: docker.io/chriskery/git-sync:v3.1.6
-          args:
-            - "--repo=git@github.com:chriskery/argo-workflow-guide.git"
-            - "--root=/workdir/root"
-            - "--max-sync-failures=3"
-            - "--timeout=200"
-            - "--branch=main"
-            - "--ssh"
-            - "--one-time"
-          name: git-data
-          volumeMounts:
-            - name: repo-root
-              mountPath: /workdir ##
-            - name: git-secret
-              mountPath: /etc/git-secret
-
+    - name: git-sync
+      container:
+        image: docker.io/chriskery/git-sync:v3.1.6
+        args:
+          - "--repo=git@github.com:chriskery/argo-workflow-guide.git"
+          - "--root=/workdir/root"
+          - "--dest=argo-workflow-guide"
+          - "--max-sync-failures=3"
+          - "--timeout=200"
+          - "--branch=main"
+          - "--ssh"
+          - "--one-time"
+        command: ["/git-sync"]
+        name: git-data
+        volumeMounts:
+          - name: repo-root
+            mountPath: /workdir ##
+          - name: git-secret
+            mountPath: /etc/git-secret
       securityContext:
         runAsUser: 0 # to allow read of ssh key
